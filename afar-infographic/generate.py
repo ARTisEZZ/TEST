@@ -110,6 +110,12 @@ def line(points, stroke, sw=1.0, extra=""):
             f'stroke-linecap="round" stroke-linejoin="round" {extra}/>')
 
 
+def grp(id_, label, content, layer=False):
+    """Именованная группа: в Inkscape — слой (layer=True) или группа с подписью."""
+    mode = ' inkscape:groupmode="layer"' if layer else ""
+    return f'<g id="{id_}" inkscape:label="{esc(label)}"{mode}>{content}</g>'
+
+
 # --- геометрия ломаных/кривых -----------------------------------------------
 def lerp(a, b, t):
     return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
@@ -349,8 +355,10 @@ def defs():
     d.append('<filter id="glow" x="-50%" y="-50%" width="200%" height="200%">'
              '<feGaussianBlur in="SourceGraphic" stdDeviation="2.6" result="b"/>'
              '<feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>')
-    d.append('<filter id="floor" x="-50%" y="-200%" width="200%" height="500%">'
-             '<feGaussianBlur stdDeviation="9"/></filter>')
+    d.append('<radialGradient id="floorgrad" cx="0.5" cy="0.5" r="0.5">'
+             '<stop offset="0" stop-color="#0b2a5b" stop-opacity="0.15"/>'
+             '<stop offset="0.6" stop-color="#0b2a5b" stop-opacity="0.06"/>'
+             '<stop offset="1" stop-color="#0b2a5b" stop-opacity="0"/></radialGradient>')
     # элементы, повторяемые много раз
     d.append('<g id="patch">'
              '<rect x="-6.6" y="-6.6" width="13.2" height="13.2" fill="url(#gold)" stroke="#8a6116" stroke-width="0.5"/>'
@@ -370,8 +378,8 @@ ANCHORS = {}   # точки для выносок
 
 
 def floor_shadow(cx, w, y=938):
-    return (f'<ellipse cx="{f(cx)}" cy="{f(y)}" rx="{f(w / 2)}" ry="7" fill="#0b2a5b" '
-            f'fill-opacity="0.13" filter="url(#floor)"/>')
+    # радиальный градиент вместо размытия — одинаково выглядит в любом редакторе
+    return f'<ellipse cx="{f(cx)}" cy="{f(y)}" rx="{f(w / 2 + 14)}" ry="13" fill="url(#floorgrad)"/>'
 
 
 
@@ -1117,24 +1125,27 @@ def callouts():
         tx0 = x + bs + 9
         lines_h = len(tl) * 16 + len(dl) * 14.5
         ax, ay = ANCHORS[num]
+        c = ""
         # линия-лидер: вниз от плашки, затем к элементу
         lx = bx + bs / 2
         ly0 = by + bs
         y_knee = max(ly0 + 4, min(ay - 26, by + bs + lines_h + 10))
         wp = [(lx, ly0), (lx, y_knee), (ax, ay)] if abs(ax - lx) > 2 else [(lx, ly0), (ax, ay)]
-        s += line(wp, LEADER, 1.0)
-        s += circle(ax, ay, 3.2, "#ffffff", NAVY, 1.4)
-        s += circle(ax, ay, 1.2, NAVY)
-        s += rect(bx, by, bs, bs, NAVY, rx=3)
-        s += text(bx + bs / 2, by + 17, str(num), 13, "bold", "#ffffff", "middle")
+        c += grp(f"callout-{num:02d}-leader", "линия-лидер",
+                 line(wp, LEADER, 1.0) + circle(ax, ay, 3.2, "#ffffff", NAVY, 1.4) + circle(ax, ay, 1.2, NAVY))
+        c += grp(f"callout-{num:02d}-badge", f"плашка {num}",
+                 rect(bx, by, bs, bs, NAVY, rx=3) + text(bx + bs / 2, by + 17, str(num), 13, "bold", "#ffffff", "middle"))
+        t_ = ""
         yy = by + 11
         for t in tl:
-            s += text(tx0, yy + 5, t, 13.5, "bold", INK)
+            t_ += text(tx0, yy + 5, t, 13.5, "bold", INK)
             yy += 16
         yy += 1
         for t in dl:
-            s += text(tx0, yy + 4, t, 11.5, "regular", GREY_TXT)
+            t_ += text(tx0, yy + 4, t, 11.5, "regular", GREY_TXT)
             yy += 14.5
+        c += grp(f"callout-{num:02d}-text", "текст", t_)
+        s += grp(f"callout-{num:02d}", f"Выноска {num} — {title}", c)
     return s
 
 
@@ -1165,17 +1176,20 @@ def panel():
             s += text(cx, yy, item, size, "semibold", INK)
             cx += text_w(item, size, "semibold")
         yy += rows_h
+    s = grp("params-panel", "Панель параметров", s, layer=True)
     # легенда
+    lg = ""
     ly = y + h + 12
     lh = 58
-    s += rect(x, ly, w, lh, "url(#panel)", "#bccbdb", 1, 10, 'filter="url(#cardshadow)"')
+    lg += rect(x, ly, w, lh, "url(#panel)", "#bccbdb", 1, 10, 'filter="url(#cardshadow)"')
     items = [(LEGEND[0], x + 16, ly + 22), (LEGEND[1], x + 176, ly + 22), (LEGEND[2], x + 318, ly + 22),
              (LEGEND[3], x + 16, ly + 44), (LEGEND[4], x + 254, ly + 44)]
-    for (col, dk, label), lx, lyy in items:
-        s += line([(lx, lyy - 4), (lx + 26, lyy - 4)], dk, 4.6)
-        s += line([(lx, lyy - 4), (lx + 26, lyy - 4)], col, 3.2)
-        s += text(lx + 34, lyy, label, 12, "medium", INK)
-    return s
+    for ((col, dk, label), lx, lyy), lid in zip(items, ("tx", "rx", "power", "control", "structure")):
+        lg += grp(f"legend-{lid}", label,
+                  line([(lx, lyy - 4), (lx + 26, lyy - 4)], dk, 4.6)
+                  + line([(lx, lyy - 4), (lx + 26, lyy - 4)], col, 3.2)
+                  + text(lx + 34, lyy, label, 12, "medium", INK))
+    return s + grp("legend", "Цветовая легенда", lg, layer=True)
 
 
 CHEVRONS = ["Антенное полотно", "ППМ (×99)", "Распределение и комбинирование", "Цифровое ядро SDR", "Спутниковая платформа"]
@@ -1215,17 +1229,32 @@ def axis_line():
     return line([(30, AXIS_Y), (1900, AXIS_Y)], "#9aabbf", 0.9, 'stroke-dasharray="10 4 2 4" stroke-opacity="0.7"')
 
 
+LAYER_NAMES = {
+    1: ("layer-01-antenna", "1 — Антенное полотно"),
+    2: ("layer-02-subarray-inset", "2 — Врезка: подрешётка 2×2"),
+    3: ("layer-03-ppm-row", "3 — Ряд ППМ ×99"),
+    4: ("layer-04-ppm-open", "4 — ППМ со снятой крышкой"),
+    5: ("layer-05-tx-distribution", "5 — TX-распределение"),
+    6: ("layer-06-rx-combining", "6 — RX-комбинирование"),
+    7: ("layer-07-control", "7 — Распределение M-LVDS"),
+    8: ("layer-08-sdr", "8 — SDR TREVO №1 и №2"),
+    9: ("layer-09-psu", "9 — Центральный ВИП"),
+    10: ("layer-10-platform", "10 — Спутниковая платформа"),
+}
+
+
 def build():
     body = []
-    body.append(rect(0, 0, W, H, "url(#bg)"))
-    body.append(rect(0, 0, W, H, "url(#bgspot)"))
-    body.append(title())
-    # тени на «полу»
+    body.append(grp("background", "Фон", rect(0, 0, W, H, "url(#bg)") + rect(0, 0, W, H, "url(#bgspot)"), layer=True))
+    body.append(grp("title", "Заголовок", title(), layer=True))
+    # тени на «полу» и ось разнесения
+    sh = ""
     for (l, r), ox in zip(FOOT, OX):
         if r - l > 1:
-            body.append(floor_shadow(ox + (l + r) / 2, (r - l) * 0.9))
-    body.append(floor_shadow(OX[9] + 110, 260))
-    body.append(axis_line())
+            sh += floor_shadow(ox + (l + r) / 2, (r - l) * 0.9)
+    sh += floor_shadow(OX[9] + 110, 260)
+    body.append(grp("floor-shadows", "Тени на полу", sh, layer=True))
+    body.append(grp("axis", "Ось разнесения", axis_line(), layer=True))
     # слои: от дальнего (справа) к ближнему (слева)
     layers = {}
     layers[10] = layer_platform()
@@ -1238,24 +1267,32 @@ def build():
     layers[3] = layer_ppm_row()
     layers[1] = layer_antenna()
     layers[2] = layer_inset_subarray()
-    body.append(conn_bundles())
+
+    def lay(k):
+        return grp(LAYER_NAMES[k][0], LAYER_NAMES[k][1], layers[k], layer=True)
+
+    body.append(grp("links-bundles", "Соединения: пучки к ППМ (TX, RX, M-LVDS/LOAD, 27 В)", conn_bundles(), layer=True))
     for k in (10, 9, 8, 7, 6, 5):
-        body.append(layers[k])
-    body.append(conn_beams())
-    body.append(conn_platform())
-    body.append(layers[4])
-    body.append(layers[3])
-    body.append(zoom_lines())
-    body.append(layers[1])
-    body.append(layers[2])
-    body.append(conn_antenna_to_ppm())
-    body.append(callouts())
+        body.append(lay(k))
+    body.append(grp("links-beams", "Соединения: 4 луча TX/RX, данные SDR", conn_beams(), layer=True))
+    body.append(grp("links-platform", "Соединения: 100 В, PPS, ISL", conn_platform(), layer=True))
+    body.append(lay(4))
+    body.append(lay(3))
+    body.append(grp("zoom-lines", "Линии увеличения врезок", zoom_lines(), layer=True))
+    body.append(lay(1))
+    body.append(lay(2))
+    body.append(grp("links-antenna-ppm", "Соединения: подрешётка → ППМ (4 TX + 4 RX)", conn_antenna_to_ppm(), layer=True))
+    body.append(grp("callouts", "Выноски 1–10", callouts(), layer=True))
     body.append(panel())
-    body.append(chevrons())
-    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+    body.append(grp("chevrons", "Лента шевронов", chevrons(), layer=True))
+    svg = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+           'xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" '
            f'width="{W}" height="{H}" viewBox="0 0 {W} {H}">'
-           f"<title>Бортовая 4-лучевая АФАР S-диапазона Direct-to-Cell: взрыв-схема</title>"
-           + defs() + "".join(body) + "</svg>")
+           "<title>Бортовая 4-лучевая АФАР S-диапазона Direct-to-Cell: взрыв-схема</title>"
+           + defs() + "".join(body) + "</svg>\n")
+    # совместимость с редакторами: xlink:href и по одному элементу на строку
+    svg = svg.replace('<use href="#', '<use xlink:href="#').replace("><", ">\n<")
     OUT_SVG.write_text(svg, encoding="utf-8")
     print(f"written {OUT_SVG} ({len(svg) / 1024:.0f} KiB)")
 
