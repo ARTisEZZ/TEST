@@ -66,7 +66,7 @@ def read_sources(filename: str, kind: str) -> list[str] | None:
     if not os.path.exists(path):
         return None
     out = []
-    for line in open(path, encoding="utf-8"):
+    for line in open(path, encoding="utf-8-sig"):   # -sig: Блокнот пишет BOM
         line = line.split(" #")[0].strip()
         # В хештегах «#вакансия» — это хештег, а «# текст» — комментарий
         if not line or (line.startswith("#") and (kind == "account" or not line[1:2].isalnum())):
@@ -83,7 +83,7 @@ def load_filters() -> dict:
     if not os.path.exists(path):
         sys.exit("Нет файла фильтры.json — он должен лежать рядом со скриптом.")
     try:
-        cfg = json.load(open(path, encoding="utf-8"))
+        cfg = json.load(open(path, encoding="utf-8-sig"))
     except json.JSONDecodeError as e:
         sys.exit(f"В фильтры.json ошибка: строка {e.lineno}, символ {e.colno}. "
                  "Чаще всего это лишняя или пропущенная запятая либо кавычка.")
@@ -257,7 +257,7 @@ def load_sample() -> list[dict]:
     if not os.path.exists(path):
         sys.exit("Нет файла tests/sample_apify.json — без него проверка не работает.")
     try:
-        items = json.load(open(path, encoding="utf-8"))
+        items = json.load(open(path, encoding="utf-8-sig"))
     except json.JSONDecodeError as e:
         sys.exit(f"В tests/sample_apify.json ошибка: строка {e.lineno}, символ {e.colno}.")
     return [p for p in items if not p.get("error")]
@@ -755,7 +755,7 @@ def drop_duplicates(recs: list[dict], threshold: float) -> tuple[list[dict], int
 
 def load_seen(path: str) -> dict:
     try:
-        return json.load(open(path, encoding="utf-8"))
+        return json.load(open(path, encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError):
         return {}
 
