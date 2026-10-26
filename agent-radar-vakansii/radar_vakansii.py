@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Радар вакансий: собирает свежие вакансии из Инстаграма через Apify.
 
-Запуск:    APIFY_TOKEN=... python3 radar_vakansii.py
+Запуск:    APIFY_TOKEN=... python3 radar_vakansii.py   (на Windows — python radar_vakansii.py)
 Проверка:  python3 radar_vakansii.py --test   (без ключа и без трат, данные из tests/)
 Результат: радар-вакансий-ГГГГ-ММ-ДД.md и .csv рядом со скриптом.
 """
@@ -18,6 +18,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+
+# Windows: без этого «⚠» в журнале запуска по расписанию ломает скрипт
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
 
 if sys.version_info < (3, 10):
     sys.exit(f"Нужен Python 3.10 или новее, а у тебя {sys.version.split()[0]}. "
